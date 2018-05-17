@@ -1,7 +1,7 @@
 import collections
 import torch as th
 import torch.nn.functional as F
-from policy.basenet import BaseConvNet, BaseLSTMNet, BaseValueNet
+from policy import BaseConvNet, BaseLSTMNet, BaseValueNet
 from policy.unreal import PixelChangeNetwork, RewardPredictionNetwork, LSTMConvNetwork
 from common.utils import ravel_index_pairs, select_from_each_row
 from options import FLAGS
@@ -87,10 +87,10 @@ class Agent(object):
         )
         # non-available actions get log(1e-10) value but that's ok because it's never used
 
-        neg_entropy_spatial = -th.sum(
+        neg_entropy_spatial = th.sum(
             base_sp_pi * spatial_action_log_probs
         ) / sum_spatial_action_available
-        neg_entropy_action_id = -th.mean(th.sum(
+        neg_entropy_action_id = th.mean(th.sum(
             base_pi * action_id_log_probs, dim=1
         ))
         policy_loss = -th.mean(selected_log_probs.total * base_adv)
@@ -173,17 +173,22 @@ class Agent(object):
         return pi_out, sp_pi_out, value, lstm_state
 
     def run_base_policy_and_value(self, obs, last_action_reward):
-        obs.update({"last_action_reward": last_action_reward})
         obs = self._pre_process(obs)
-        obs.update({"lstm_state": self.base_lstm_state_out})
-        pi_out, sp_pi_out, v_out, self.base_lstm_state_out = self.base_net_forward(**obs)
+        last_action_reward = th.from_numpy(last_action_reward)
+        if th.cuda.is_available():
+            last_action_reward = last_action_reward.cuda()
+        pi_out, sp_pi_out, v_out, self.base_lstm_state_out = self.base_net_forward(last_action_reward=last_action_reward,
+                                                                                   lstm_state=self.base_lstm_state_out,
+                                                                                   **obs)
         return pi_out, sp_pi_out, v_out
 
     def run_base_value(self, obs, last_action_reward):
-        obs.update({"last_action_reward": last_action_reward})
-        obs = self._pre_process(obs)
-        obs.update({"lstm_state": self.base_lstm_state_out})
-        ___, __, v_out, _ = self.base_net_forward(**obs)
+        last_action_reward = th.from_numpy(last_action_reward)
+        if th.cuda.is_available():
+            last_action_reward = last_action_reward.cuda()
+        ___, __, v_out, _ = self.base_net_forward(last_action_reward=last_action_reward,
+                                                  lstm_state=self.base_lstm_state_out,
+                                                  **obs)
         return v_out
 
     def pc_net_forward(self, available_action_ids, minimap_numeric,
@@ -197,9 +202,11 @@ class Agent(object):
         return pc_q, pc_q_max
 
     def run_pc_q_max(self, obs, last_action_reward):
-        obs.update({"last_action_reward": last_action_reward})
         obs = self._pre_process(obs)
-        pc_q, pc_q_max = self.pc_net_forward(**obs)
+        last_action_reward = th.from_numpy(last_action_reward)
+        if th.cuda.is_available():
+            last_action_reward = last_action_reward.cuda()
+        pc_q, pc_q_max = self.pc_net_forward(last_action_reward=last_action_reward,**obs)
         return pc_q, pc_q_max
 
     def vr_net_forward(self, available_action_ids, minimap_numeric,
@@ -213,9 +220,11 @@ class Agent(object):
         return value
 
     def run_vr_value(self, obs, last_action_reward):
-        obs.update({"last_action_reward": last_action_reward})
         obs = self._pre_process(obs)
-        vr_v_out = self.vr_net_forward(**obs)
+        last_action_reward = torch.from_numpy(last_action_reward)
+        if torch.cuda.is_available():
+            last_action_reward = last_action_reward.cuda()
+        vr_v_out = self.vr_net_forward(last_action_reward=last_action_reward,**obs)
         return vr_v_out
 
     def rp_net_forward(self, available_action_ids, minimap_numeric,

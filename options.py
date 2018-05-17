@@ -52,6 +52,6 @@ flags.DEFINE_integer("save_interval_step", 100 * 1000, "saving interval steps")
 flags.DEFINE_float("alpha", 0.99, "decay parameter for rmsprop")
 flags.DEFINE_float("epsilon", 0.1, "epsilon parameter for rmsprop")
 
-flags.DEFINE_enum("agent_mode", Mode.UNREAL, [Mode.DQN, Mode.A2C, Mode.PPO, Mode.UNREAL], " use A2C or PPO")
+flags.DEFINE_enum("agent_mode", Mode.UNREAL, [Mode.A2C, Mode.PPO, Mode.UNREAL], " use A2C or PPO")
 flags.DEFINE_enum('policy', Policy.SepConv, [Policy.FullyConv, Policy.ConvLSTM, Policy.SepConv],
                   "policy")

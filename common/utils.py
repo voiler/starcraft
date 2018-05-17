@@ -4,7 +4,6 @@ import torch.nn as nn
 
 
 class Mode:
-    DQN = 'dqn'
     A2C = "a2c"
     PPO = "ppo"
     UNREAL = "unreal"

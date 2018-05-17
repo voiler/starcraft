@@ -9,7 +9,7 @@ import torch as th
 from torch.nn import functional as F
 from torch import optim
 from policy import FullyConvPolicy
-from common.utils import weighted_random_sample, select_from_each_row, ravel_index_pairs
+from common.utils import select_from_each_row, ravel_index_pairs
 
 SelectedLogProbs = collections.namedtuple("SelectedLogProbs", ["action_id", "spatial", "total"])
 
@@ -69,13 +69,13 @@ class Agent:
             }[optimiser]
         else:
             pars = optimiser_pars
+        self.distribution = th.distributions.Categorical
         self.optimiser = opt_class(**pars)
         self.old_policy = policy(unit_type_emb_dim)
         self.old_policy.eval()
         if th.cuda.is_available():
             self.old_policy.cuda()
         self.update_policy()
-        self.distribution = th.distributions.Categorical
 
     def pre_process(self, obs):
         if th.cuda.is_available():
@@ -97,31 +97,34 @@ class Agent:
         total = spatial + action_id
 
         return SelectedLogProbs(action_id, spatial, total)
-
-    def step(self, obs):
-        # screen_unit_type, player_relative_screen
-        # player_relative_minimap, screen_numeric
-        # minimap_numeric
-        obs = self.pre_process(obs)
-        action_id, spatial_action, value_estimate = self.old_policy(**obs)
-        m = self.distribution(action_id)
-        action_id = m.sample()
+    def choise_action(self,pi, sp_pi):
+        m = self.distribution(pi)
+        pi_action = m.sample()
         # action_id = weighted_random_sample(action_id)
         # spatial_action = weighted_random_sample(spatial_action)
-        sp_m = self.distribution(spatial_action)
+        sp_m = self.distribution(sp_pi)
         spatial_action = sp_m.sample()
-        action_id, spatial_action, value_estimate = \
-            action_id.detach(), spatial_action.detach(), value_estimate.detach()
-        if th.cuda.is_available():
-            action_id, spatial_action, value_estimate = \
-                action_id.cpu(), spatial_action.cpu(), value_estimate.cpu()
-        action_id, spatial_action, value_estimate = \
-            action_id.numpy(), spatial_action.numpy(), value_estimate.numpy()
+        action_id, spatial_action = \
+            pi_action.numpy(), spatial_action.numpy()
         spatial_action_2d = np.array(
             np.unravel_index(spatial_action, (self.spatial_dim,) * 2)
         ).transpose()
+        return action_id, spatial_action_2d
 
-        return action_id, spatial_action_2d, value_estimate
+    def step(self, obs):
+        obs = self.pre_process(obs)
+        action_id, spatial_action, value_estimate = self.policy(**obs)
+        value = value_estimate.detach()
+        if th.cuda.is_available():
+            value = value.cpu()
+        value =  value.numpy()
+        action_id, spatial_action = \
+            action_id.detach(), spatial_action.detach()
+        if th.cuda.is_available():
+            action_id, spatial_action = \
+                action_id.cpu(), spatial_action.cpu()
+        action_id, spatial_action_2d = self.choise_action(action_id,spatial_action)
+        return action_id, spatial_action_2d, value
 
     def train(self, inputs, obs):
         inputs = self.pre_process(inputs)
@@ -184,11 +187,17 @@ class Agent:
         )
         policy_loss = -th.mean(l_clip)
         value_loss = F.mse_loss(value_target, value_estimate)
-        loss = th.sum([policy_loss,
-                       value_loss * self.loss_value_weight,
-                       neg_entropy_spatial * self.entropy_weight_spatial,
-                       neg_entropy_action_id * self.entropy_weight_action_id])
-        self.writer.add_scalar('loss', loss, self.train_step)
+        loss = policy_loss + \
+               value_loss * self.loss_value_weight + \
+               neg_entropy_spatial * self.entropy_weight_spatial + \
+               neg_entropy_action_id * self.entropy_weight_action_id
+        self.writer.add_scalar('loss/loss', loss, self.train_step)
+        self.writer.add_scalar('loss/value_loss', value_loss, self.train_step)
+        self.writer.add_scalar('loss/policy_loss', policy_loss, self.train_step)
+        self.writer.add_scalar('loss/neg_entropy_spatial', neg_entropy_spatial, self.train_step)
+        self.writer.add_scalar('loss/neg_entropy_action_id', neg_entropy_action_id, self.train_step)
+        print("train step: {} | value loss: {} | policy loss: {} | neg entropy spatial: {} | neg entropy action: {} | loss: {}".format(
+            self.train_step, value_loss, policy_loss, neg_entropy_spatial, neg_entropy_action_id, loss))
         self.optimiser.zero_grad()
         loss.backward()
         th.nn.utils.clip_grad_norm_(self.policy.parameters(), FLAGS.grad_norm_clip)
@@ -224,3 +233,4 @@ class Agent:
 
     def update_policy(self):
         self.old_policy.load_state_dict(self.policy.state_dict())
+        self.old_policy.eval()

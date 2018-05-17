@@ -65,7 +65,7 @@ class Trainer(object):
     def prepare(self):
         obs = self.environment.reset()
         self.last_state = self.obs_processer.process(obs)
-        self.last_actions = [0, [0, 0]]
+        self.last_actions = [[0], [[0, 0]]]
         self.last_reward = 0
 
     def close(self):
@@ -94,7 +94,7 @@ class Trainer(object):
         spatial_action_2d = np.array(
             np.unravel_index(spatial_action, (self.spatial_dim,) * 2)
         ).transpose()
-        return action_id[0], spatial_action_2d[0]
+        return action_id, spatial_action_2d
 
     def _record_score(self, summary_writer, score, global_t):
         summary_writer.add_scalar("score", score, global_t)
@@ -113,12 +113,12 @@ class Trainer(object):
         pi_, sp_pi_, _ = self.local_network.run_base_policy_and_value(
             self.last_state,
             np.expand_dims(last_action_reward, 0))
-        action_id, spatial_action = \
+        pi_, sp_pi_ = \
             pi_.detach(), sp_pi_.detach()
         if th.cuda.is_available():
-            action_id, spatial_action = \
-                action_id.cpu(), spatial_action.cpu()
-        actions = self.choose_action(action_id, spatial_action)
+            pi_, sp_pi_ = \
+                pi_.cpu(), sp_pi_.cpu()
+        actions = self.choose_action(pi_, sp_pi_)
         actions_pp = self.action_processer.process(*actions)
         new_state, reward, terminal = self.environment.step(actions_pp)
         self.last_state = self.obs_processer.process(new_state)
@@ -132,12 +132,12 @@ class Trainer(object):
         if terminal:
             obs = self.environment.reset()
             self.last_state = self.obs_processer.process(obs)
-            self.last_actions = [0, [0, 0]]
+            self.last_actions = [[0], [[0, 0]]]
             self.last_reward = 0
         if self.experience.is_full():
             obs = self.environment.reset()
             self.last_state = self.obs_processer.process(obs)
-            self.last_actions = [0, [0, 0]]
+            self.last_actions = [[0], [[0, 0]]]
             self.last_reward = 0
             print("Replay buffer filled")
 
@@ -166,6 +166,7 @@ class Trainer(object):
             # Prepare last action reward
             last_actions = self.last_actions
             last_reward = self.last_reward
+            last_state = self.last_state
             last_action_reward = ExperienceFrame.concat_action_and_reward(last_actions,
                                                                           last_reward)
 
@@ -181,7 +182,7 @@ class Trainer(object):
                 pi_.numpy(), sp_pi_.numpy(), value_.numpy()
             action = (pi_, sp_pi_)
             actions.append(action)
-            states.append(self.last_state)
+            states.append(last_state)
             last_action_rewards.append(last_action_reward)
 
             values.append(value_)
@@ -191,7 +192,7 @@ class Trainer(object):
                 print("spatial pi={}".format(sp_pi_))
                 print(" V={}".format(value_))
 
-            last_state = self.last_state
+
 
             # Process game
             actions_pp = self.action_processer.process(*action)
@@ -221,7 +222,7 @@ class Trainer(object):
                 self.episode_reward = 0
                 obs = self.environment.reset()
                 self.last_state = self.obs_processer.process(obs)
-                self.last_actions = [0, [0, 0]]
+                self.last_actions = [[0], [[0, 0]]]
                 self.last_reward = 0
                 self.local_network.reset_state()
                 break
