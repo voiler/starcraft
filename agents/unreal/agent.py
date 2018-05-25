@@ -1,10 +1,12 @@
 import collections
 import torch as th
 import torch.nn.functional as F
-from policy import BaseConvNet, BaseLSTMNet, BaseValueNet
-from policy.unreal import PixelChangeNetwork, RewardPredictionNetwork, LSTMConvNetwork
+from policy import BaseConvNet, BaseLSTMNet, BaseValueNet, BasePolicyNet
+from policy.unreal import PixelChangeNetwork, RewardPredictionNetwork
 from common.utils import ravel_index_pairs, select_from_each_row
 from options import FLAGS
+from common.utils import one_hot_encoding
+from pysc2.lib import SCREEN_FEATURES, MINIMAP_FEATURES
 
 SelectedLogProbs = collections.namedtuple("SelectedLogProbs", ["action_id", "spatial", "total"])
 
@@ -31,9 +33,9 @@ class Agent(object):
         self.base_value_net = BaseValueNet()
         if th.cuda.is_available():
             self.base_value_net.cuda()
-        self.base_net = LSTMConvNetwork()
+        self.base_policy_net = BasePolicyNet()
         if th.cuda.is_available():
-            self.base_net.cuda()
+            self.base_policy_net.cuda()
         if use_pixel_change:
             self.pc_net = PixelChangeNetwork()
             if th.cuda.is_available():
@@ -164,6 +166,13 @@ class Agent(object):
     def base_net_forward(self, available_action_ids, minimap_numeric,
                          player_relative_minimap, player_relative_screen,
                          screen_numeric, screen_unit_type, last_action_reward, lstm_state=None):
+        player_relative_screen = one_hot_encoding(
+            player_relative_screen, SCREEN_FEATURES.player_relative.scale,
+            (FLAGS.resolution, FLAGS.resolution))
+
+        player_relative_minimap = one_hot_encoding(
+            player_relative_minimap, MINIMAP_FEATURES.player_relative.scale,
+            (FLAGS.resolution, FLAGS.resolution))
         map_output = self.base_conv_net(available_action_ids, minimap_numeric,
                                         player_relative_minimap, player_relative_screen,
                                         screen_numeric, screen_unit_type)
@@ -177,9 +186,10 @@ class Agent(object):
         last_action_reward = th.from_numpy(last_action_reward)
         if th.cuda.is_available():
             last_action_reward = last_action_reward.cuda()
-        pi_out, sp_pi_out, v_out, self.base_lstm_state_out = self.base_net_forward(last_action_reward=last_action_reward,
-                                                                                   lstm_state=self.base_lstm_state_out,
-                                                                                   **obs)
+        pi_out, sp_pi_out, v_out, self.base_lstm_state_out = self.base_net_forward(
+            last_action_reward=last_action_reward,
+            lstm_state=self.base_lstm_state_out,
+            **obs)
         return pi_out, sp_pi_out, v_out
 
     def run_base_value(self, obs, last_action_reward):
@@ -206,7 +216,7 @@ class Agent(object):
         last_action_reward = th.from_numpy(last_action_reward)
         if th.cuda.is_available():
             last_action_reward = last_action_reward.cuda()
-        pc_q, pc_q_max = self.pc_net_forward(last_action_reward=last_action_reward,**obs)
+        pc_q, pc_q_max = self.pc_net_forward(last_action_reward=last_action_reward, **obs)
         return pc_q, pc_q_max
 
     def vr_net_forward(self, available_action_ids, minimap_numeric,
@@ -221,10 +231,10 @@ class Agent(object):
 
     def run_vr_value(self, obs, last_action_reward):
         obs = self._pre_process(obs)
-        last_action_reward = torch.from_numpy(last_action_reward)
-        if torch.cuda.is_available():
+        last_action_reward = th.from_numpy(last_action_reward)
+        if th.cuda.is_available():
             last_action_reward = last_action_reward.cuda()
-        vr_v_out = self.vr_net_forward(last_action_reward=last_action_reward,**obs)
+        vr_v_out = self.vr_net_forward(last_action_reward=last_action_reward, **obs)
         return vr_v_out
 
     def rp_net_forward(self, available_action_ids, minimap_numeric,
@@ -246,7 +256,7 @@ class Agent(object):
         self.base_conv_net.load_state_dict(net.base_conv_net)
         self.base_lstm_net.load_state_dict(net.base_lstm_net)
         self.base_value_net.load_state_dict(net.base_value_net)
-        self.base_net.load_state_dict(net.base_net.state_dict())
+        self.base_policy_net.load_state_dict(net.base_net.state_dict())
         if self._use_pixel_change:
             self.pc_net.load_state_dict(net.pc_net.state_dict())
         if self._use_reward_prediction:
@@ -259,7 +269,7 @@ class Agent(object):
             gp._grad = lp.grad
         for lp, gp in zip(self.base_value_net.parameters(), net.base_value_net.parameters()):
             gp._grad = lp.grad
-        for lp, gp in zip(self.base_net.parameters(), net.base_net.parameters()):
+        for lp, gp in zip(self.base_policy_net.parameters(), net.base_net.parameters()):
             gp._grad = lp.grad
         if self._use_pixel_change:
             for lp, gp in zip(self.pc_net.parameters(), net.pc_net.parameters()):
@@ -274,7 +284,7 @@ class Agent(object):
             'base_conv_state_dict': self.base_conv_net.state_dict(),
             'base_lstm_state_dict': self.base_lstm_net.state_dict(),
             'base_value_state_dict': self.base_value_net.state_dict(),
-            'base_state_dict': self.base_net.state_dict(),
+            'base_state_dict': self.base_policy_net.state_dict(),
         }
         if self._use_pixel_change:
             state.update({'pc_state_dict': self.pc_net.state_dict()})
@@ -289,7 +299,7 @@ class Agent(object):
         self.base_conv_net.load_state_dict(checkpoint['base_conv_state_dict'])
         self.base_lstm_net.load_state_dict(checkpoint['base_lstm_state_dict'])
         self.base_value_net.load_state_dict(checkpoint['base_value_state_dict'])
-        self.base_net.load_state_dict(checkpoint['base_state_dict'])
+        self.base_policy_net.load_state_dict(checkpoint['base_state_dict'])
         if self._use_pixel_change:
             self.pc_net.load_state_dict(checkpoint['pc_state_dict'])
         if self._use_reward_prediction:
@@ -299,7 +309,10 @@ class Agent(object):
         return start_epoch
 
     def share_memory(self):
-        self.base_net.share_memory()
+        self.base_conv_net.share_memory()
+        self.base_lstm_net.share_memory()
+        self.base_value_net.share_memory()
+        self.base_policy_net.share_memory()
         if self._use_pixel_change:
             self.pc_net.share_memory()
         if self._use_reward_prediction:

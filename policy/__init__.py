@@ -1,6 +1,6 @@
 from .fullyconv import FullyConvPolicy
-from .lstmconv import LSTMConvPolicy
-from .basenet import BaseConvNet, BaseLSTMNet, BaseValueNet
+from .convlstm import LSTMConvPolicy
+from .basenet import BaseConvNet, BaseLSTMNet, BaseValueNet, BasePolicyNet
 from .separableconv import SepConvPolicy
 from options import Policy
 

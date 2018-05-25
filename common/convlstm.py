@@ -12,13 +12,6 @@ def weights_init(m):
 
 
 class ConvLSTMCell(nn.Module):
-    """Initialize a basic Conv LSTM cell.
-    Args:
-      shape: int tuple thats the height and width of the hidden states h and c()
-      filter_size: int that is the height and width of the filters
-      num_features: int thats the num of channels of the states, like hidden_size
-
-    """
 
     def __init__(self, input_shape, num_channels, kernel_size, hidden_size):
         super(ConvLSTMCell, self).__init__()

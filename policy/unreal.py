@@ -5,29 +5,6 @@ import torch
 from options import FLAGS
 
 
-class LSTMConvNetwork(nn.Module):
-    def __init__(self):
-        super(LSTMConvNetwork, self).__init__()
-        self.spatial_action_conv = nn.Conv2d(in_channels=64,
-                                             out_channels=1,
-                                             kernel_size=1,
-                                             stride=1
-                                             )
-        self.action_fc = nn.Linear(in_features=256,
-                                   out_features=len(actions.FUNCTIONS)
-                                   )
-
-    def forward(self, available_action_ids, lstm_output, fc1):
-        spatial_action_logits = self.spatial_action_conv(lstm_output)
-        spatial_action_probs = F.softmax(
-            spatial_action_logits.view(spatial_action_logits.size(0), -1), dim=1
-        )
-        action_output = F.softmax(self.action_fc(fc1), dim=1)
-        action = action_output * available_action_ids
-        action_id_probs = action / torch.sum(action, dim=1, keepdim=True)
-        return action_id_probs, spatial_action_probs
-
-
 class PixelChangeNetwork(nn.Module):
     def __init__(self):
         super(PixelChangeNetwork, self).__init__()

@@ -7,12 +7,10 @@ from pysc2.lib.features import SCREEN_FEATURES, MINIMAP_FEATURES, FeatureType
 
 
 def log_transform(x, scale):
-    # 8 is a "feel good" magic number and doesn't mean anything here.
     return np.log(8 * x / scale + 1)
 
 
 def get_visibility_flag(visibility_feature):
-    # 0=hidden, 1=fogged, 2=visible
     return np.expand_dims(visibility_feature == 2, axis=0)
 
 
@@ -23,7 +21,6 @@ def numeric_idx_and_scale(set):
     ]
     idx, scale = [np.array(k) for k in zip(*idx_and_scale)]
     scale = scale.reshape(-1, 1, 1)
-    # [k.name for k in SCREEN_FEATURES if k.type == FeatureType.SCALAR]
     return idx, scale
 
 
@@ -69,7 +66,6 @@ class ObsProcesser:
     def get_mimimap_numeric(self, obs):
         minimap_obs = obs["minimap"]
 
-        # This is only height_map for minimiap
         scaled_scalar_obs = log_transform(
             minimap_obs[self.minimap_numeric_idx], self.minimap_numeric_scale
         )
@@ -145,9 +141,6 @@ def arg_names():
 
 
 def find_rect_function_id():
-    """
-    this is just a change-safe way to return 3
-    """
     x = [k.id for k, names in zip(actions.FUNCTIONS, arg_names()) if "screen2" in names]
     assert len(x) == 1
     return x[0]

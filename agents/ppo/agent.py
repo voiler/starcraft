@@ -1,5 +1,3 @@
-from copy import deepcopy
-
 from options import FLAGS
 from tensorboardX import SummaryWriter
 import collections
@@ -28,18 +26,6 @@ class Agent:
                  optimiser_pars: dict = None,
                  policy=FullyConvPolicy
                  ):
-        """
-        Actor-Critic Agent for learning pysc2-minigames
-        :param summary_path: summaries will be created here
-        :param spatial_dim: dimension for both minimap and screen
-        :param clip_epsilon: epsilon for clipping the ratio in PPO (no effect in A2C)
-        :param loss_value_weight: value weight for a2c update
-        :param entropy_weight_spatial: spatial entropy weight for a2c update
-        :param entropy_weight_action_id: action selection entropy weight for a2c update
-        :param optimiser: see valid choices below
-        :param optimiser_pars: optional parameters to pass in optimiser
-        :param policy: Policy class
-        """
 
         assert optimiser in ["adam", "rmsprop"]
         self.spatial_dim = spatial_dim
@@ -97,11 +83,10 @@ class Agent:
         total = spatial + action_id
 
         return SelectedLogProbs(action_id, spatial, total)
-    def choise_action(self,pi, sp_pi):
+
+    def choise_action(self, pi, sp_pi):
         m = self.distribution(pi)
         pi_action = m.sample()
-        # action_id = weighted_random_sample(action_id)
-        # spatial_action = weighted_random_sample(spatial_action)
         sp_m = self.distribution(sp_pi)
         spatial_action = sp_m.sample()
         action_id, spatial_action = \
@@ -117,13 +102,13 @@ class Agent:
         value = value_estimate.detach()
         if th.cuda.is_available():
             value = value.cpu()
-        value =  value.numpy()
+        value = value.numpy()
         action_id, spatial_action = \
             action_id.detach(), spatial_action.detach()
         if th.cuda.is_available():
             action_id, spatial_action = \
                 action_id.cpu(), spatial_action.cpu()
-        action_id, spatial_action_2d = self.choise_action(action_id,spatial_action)
+        action_id, spatial_action_2d = self.choise_action(action_id, spatial_action)
         return action_id, spatial_action_2d, value
 
     def train(self, inputs, obs):
@@ -196,8 +181,9 @@ class Agent:
         self.writer.add_scalar('loss/policy_loss', policy_loss, self.train_step)
         self.writer.add_scalar('loss/neg_entropy_spatial', neg_entropy_spatial, self.train_step)
         self.writer.add_scalar('loss/neg_entropy_action_id', neg_entropy_action_id, self.train_step)
-        print("train step: {} | value loss: {} | policy loss: {} | neg entropy spatial: {} | neg entropy action: {} | loss: {}".format(
-            self.train_step, value_loss, policy_loss, neg_entropy_spatial, neg_entropy_action_id, loss))
+        print(
+            "train step: {} | value loss: {} | policy loss: {} | neg entropy spatial: {} | neg entropy action: {} | loss: {}".format(
+                self.train_step, value_loss, policy_loss, neg_entropy_spatial, neg_entropy_action_id, loss))
         self.optimiser.zero_grad()
         loss.backward()
         th.nn.utils.clip_grad_norm_(self.policy.parameters(), FLAGS.grad_norm_clip)

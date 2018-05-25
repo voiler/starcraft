@@ -23,22 +23,13 @@ class ExperienceFrame(object):
                                    1)  # (After this last reward was received, agent move to the 'state') (Clipped)
 
     def get_last_action_reward(self):
-        """
-        Return one hot vectored last action + last reward.
-        """
         return ExperienceFrame.concat_action_and_reward(self.last_action, self.last_reward)
 
     def get_action_reward(self):
-        """
-        Return one hot vectored action + reward.
-        """
         return ExperienceFrame.concat_action_and_reward(self.action, self.reward)
 
     @staticmethod
     def concat_action_and_reward(action, reward):
-        """
-        Return one hot vectored action and reward.
-        """
         action, sp_action = action
         action_reward = np.ones([SIZE + 1], dtype=np.float32) * 1e-12
         action_reward[action] = 1.0
@@ -122,9 +113,6 @@ class Experience(object):
         return sampled_frames
 
     def sample_rp_sequence(self):
-        """
-        Sample 4 successive frames for reward prediction.
-        """
         if np.random.randint(2) == 0:
             from_zero = True
         else:
