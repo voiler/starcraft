@@ -178,7 +178,7 @@ class Agent(object):
                                         screen_numeric, screen_unit_type)
         lstm_output, lstm_state = self.base_lstm_net(map_output, last_action_reward, lstm_state)
         fc1, value = self.base_value_net(lstm_output)
-        pi_out, sp_pi_out = self.base_net(available_action_ids, lstm_output, fc1)
+        pi_out, sp_pi_out = self.base_policy_net(available_action_ids, lstm_output, fc1)
         return pi_out, sp_pi_out, value, lstm_state
 
     def run_base_policy_and_value(self, obs, last_action_reward):
