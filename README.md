@@ -9,3 +9,5 @@ PySC2的 [GitHub](https://github.com/deepmind/pysc2)
 OpenAI [baselines](https://github.com/openai/baselines)
 
 PyTorch的基础[教程](https://github.com/MorvanZhou/PyTorch-Tutorial)
+
+unreal模块因为代码编写问题，显存占用过高无运行。目前尚未解决
